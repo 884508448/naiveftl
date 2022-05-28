@@ -5,6 +5,7 @@ import torch
 from ftl_param import FTLParam
 from utils.ftl_data_loader import FTLDataLoader
 from utils.ftl_log import LOGGER
+from typing import List
 
 
 class FTLBase:
@@ -12,7 +13,7 @@ class FTLBase:
         self.m_param = param
         self._nn_model = torch.nn.Sequential()
         self._layer_index = 0
-        self._optimizer = torch.optim.Adam(self._nn_model.parameters(), lr=0.01)
+        self._optimizer = None
         LOGGER.info(f"ftl {self.m_param.role} starting")
 
         LOGGER.debug("loading data")
@@ -33,19 +34,19 @@ class FTLBase:
             assert (
                 addr == self.m_param.partner_addr
             ), f"get connection from: {addr}, not equal to offered: {self.m_param.partner_addr}"
-            self.__messenger: socket.socket = conn
+            self._messenger: socket.socket = conn
         else:
             self.m_sock.bind((consts.DEFAULT_IP, consts.HOST_DEFAULT_PORT))
             self.m_sock.connect(self.m_param.partner_addr)
-            self.__messenger: socket.socket = self.m_sock
+            self._messenger: socket.socket = self.m_sock
 
     def send(self, msg):
         # send msg to partner
-        self.__messenger.sendall(msg)
+        self._messenger.sendall(msg)
 
     def rcv(self):
         # receive msg from partner, the buffer size is defined in consts.py
-        return self.__messenger.recv(consts.DEFAULT_BUFFER_SIZE)
+        return self._messenger.recv(consts.DEFAULT_BUFFER_SIZE)
 
     def add_nn_layer(self, layer):
         self._nn_model.add_module(name=f"layer {self._layer_index}", module=layer)
@@ -53,7 +54,6 @@ class FTLBase:
         LOGGER.debug(f"add layer {layer} successfully")
 
     def set_optimizer(self, optimizer):
-        assert isinstance(optimizer, torch.optim)
         old_optimizer = self._optimizer
         self._optimizer = optimizer
         LOGGER.debug(

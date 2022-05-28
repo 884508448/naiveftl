@@ -1,16 +1,20 @@
+import torch
+import torch.nn as nn
+
 from ftl_guest import FTLGuest
 from ftl_param import FTLParam
+from utils import consts
 
 g_p = {
-    "partner_addr": ("127.0.0.1", 1235),
-    "role": "guest",
-    "data_path": "data/mini_nus_wide_train_guest.csv"
+    "partner_addr": (consts.DEFAULT_IP, consts.HOST_DEFAULT_PORT),
+    "role": consts.GUEST,
+    "data_path": "data/mini_nus_wide_train_guest.csv",
 }
 guest_param = FTLParam(**g_p)
 
 guest_ftl = FTLGuest(guest_param)
-guest_ftl.compute_guest_components()
-
-# rcv = guest_ftl.rcv()
-# print(rcv)
-# guest_ftl.send(b"hello host")
+guest_ftl.add_nn_layer(
+    layer=nn.Linear(in_features=634, out_features=32, dtype=torch.float32)
+)
+guest_ftl.add_nn_layer(layer=nn.Sigmoid())
+guest_ftl.train()

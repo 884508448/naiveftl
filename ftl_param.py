@@ -1,11 +1,21 @@
-
 import os
+
+from utils import consts
 
 
 class FTLParam:
-    def __init__(self, partner_addr, role, data_path, loss_tol=0.000001, const_k=-2, const_lambda=1,
-                 epochs=1, batch_size=-1,
-                 mode='plain'):
+    def __init__(
+        self,
+        partner_addr,
+        role,
+        data_path,
+        loss_tol=0.000001,
+        const_k=-2,
+        const_gamma=1,
+        epochs=1,
+        batch_size=-1,
+        mode="plain",
+    ):
         """
         Parameters
         ----------
@@ -15,12 +25,6 @@ class FTLParam:
             specifies whether the participant is host or guest
         loss_tol : float
             loss tolerance
-        optimizer : str or dict
-            optimizer method, accept following types:
-            1. a string, one of "Adadelta", "Adagrad", "Adam", "Adamax", "Nadam", "RMSprop", "SGD"
-            2. a dict, with a required key-value pair keyed by "optimizer",
-                with optional key-value pairs such as learning rate.
-            defaults to "SGD"
         epochs : int
             epochs num
         batch_size : int
@@ -35,7 +39,7 @@ class FTLParam:
         self.data_path = data_path
         self.loss_tol = loss_tol
         self.const_k = const_k
-        self.const_lambda = const_lambda
+        self.const_gamma = const_gamma
         self.epochs = epochs
         self.batch_size = batch_size
         self.mode = mode
@@ -46,11 +50,14 @@ class FTLParam:
             raise ValueError("partner_addr should be a tuple of (ip,port)")
 
         assert self.role in (
-            "host", "guest"), f"role options: host or guest, but {self.role} is offered"
+            "host",
+            "guest",
+        ), f"role options: host or guest, but {self.role} is offered"
 
         if not os.path.exists(self.data_path):
             raise ValueError(
-                f"data_path does not exists! please check: {self.data_path}")
+                f"data_path does not exists! please check: {self.data_path}"
+            )
 
         if not isinstance(self.loss_tol, (int, float)):
             raise ValueError("loss_tol should be numeric")
@@ -62,4 +69,6 @@ class FTLParam:
             raise ValueError("batch_size should be int")
 
         assert self.mode in (
-            "encrypted", "plain"), f"mode options: encrypted or plain, but {self.mode} is offered"
+            consts.ENCRYPTED_NODE,
+            consts.PLAIN_MODE,
+        ), f"mode options: encrypted or plain, but {self.mode} is offered"
