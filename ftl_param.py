@@ -10,11 +10,13 @@ class FTLParam:
         role,
         data_path,
         loss_tol=0.000001,
-        const_k=-2,
+        const_k=-1,
         const_gamma=1,
-        epochs=1,
+        epochs=10,
         batch_size=-1,
         mode="plain",
+        learning_rate=0.01,
+        predict_data_path=None
     ):
         """
         Parameters
@@ -32,6 +34,8 @@ class FTLParam:
         mode: {"plain", "encrypted"}
             plain: will not use any encrypt algorithms, data exchanged in plaintext
             encrypted: use paillier to encrypt gradients
+        learning_rate: float, the learning rate of local model
+        predict_data_path : str
         """
 
         self.partner_addr = partner_addr
@@ -43,6 +47,8 @@ class FTLParam:
         self.epochs = epochs
         self.batch_size = batch_size
         self.mode = mode
+        self.learning_rate = learning_rate
+        self.predict_data_path = predict_data_path
         self.param_check()
 
     def param_check(self):
@@ -72,3 +78,8 @@ class FTLParam:
             consts.ENCRYPTED_NODE,
             consts.PLAIN_MODE,
         ), f"mode options: encrypted or plain, but {self.mode} is offered"
+
+        if self.predict_data_path is not None and not os.path.exists(self.predict_data_path):
+            raise ValueError(
+                f"predict_data_path does not exists! please check: {self.predict_data_path}"
+            )

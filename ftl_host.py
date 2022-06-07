@@ -8,6 +8,7 @@ from ftl_param import FTLParam
 from utils.ftl_log import LOGGER
 from phe import paillier
 from utils import consts
+from utils.ftl_data_loader import FTLDataLoader
 
 
 class FTLHost(FTLBase):
@@ -39,10 +40,11 @@ class FTLHost(FTLBase):
         for index, id in enumerate(self.nab_ids):
             if id in self.nc_ids:
                 self.nc_indices.append(index)
+        LOGGER.debug(f"nc indices: {self.nc_indices}")
 
     def __get_ub(self):
         self.ub_nab = []
-        self.ub_batchs=[]
+        self.ub_batchs = []
         for i in range(0, len(self.nab_indices), self.m_param.batch_size):
             batch_start = i
             batch_end = batch_start + self.m_param.batch_size
@@ -64,6 +66,7 @@ class FTLHost(FTLBase):
 
     def __compute_hB(self):
         self.__get_ub()
+
         # The preceding None placeholder makes the subscript same as in the formula
         hB = [None] * 7
 
@@ -82,9 +85,7 @@ class FTLHost(FTLBase):
     def __update_model(self, gradients):
         gradients = torch.tensor(gradients)
         for ub_batch in self.ub_batchs:
-            self.backward(
-                predicts=ub_batch, gradients_tensor=gradients
-            )
+            self.backward(predicts=ub_batch, gradients_tensor=gradients)
 
     def __encrypt(self):
         pass
@@ -100,7 +101,7 @@ class FTLHost(FTLBase):
                 "optimizer has not been seted, it will be automatically seted as the default optimizer"
             )
             self.set_optimizer(
-                optimizer=torch.optim.Adam(self._nn_model.parameters(), lr=0.01)
+                optimizer=torch.optim.Adam(self._nn_model.parameters(), lr=self.m_param.learning_rate)
             )
 
         # generate key pair
@@ -109,9 +110,9 @@ class FTLHost(FTLBase):
         self.send(pickle.dumps(self._public_key))
         LOGGER.debug("send public key to guest")
 
-        LOGGER.debug(f"host training, mode: {self.m_param.mode}")
+        LOGGER.info(f"host training, mode: {self.m_param.mode}")
         for epoch in tqdm.tqdm(range(self.m_param.epochs)):
-            LOGGER.debug(f"-----epoch {epoch} begin-----")
+            LOGGER.info(f"-----epoch {epoch} begin-----")
             hB = self.__compute_hB()
 
             if self.m_param.mode == "plain":
@@ -142,6 +143,7 @@ class FTLHost(FTLBase):
                 partial_ub = partial_ub_minus + 2 * self.m_param.const_gamma * np.dot(
                     np.ones(len(self.ub_nab_np)), self.ub_nab_np
                 )
+                partial_ub /= len(self.ub_nab)
 
                 self.__update_model(gradients=partial_ub)
 
@@ -152,11 +154,49 @@ class FTLHost(FTLBase):
                 L, noised_partial_ua_minus = h_L, h_noised_partial_ua_minus
                 self.send(pickle.dumps((L, noised_partial_ua_minus)))
                 LOGGER.debug("host send L and noised partial ua-")
+                LOGGER.info(f"-----epoch {epoch} end, loss: {L}-----")
 
                 # receive stop signal
                 signal = pickle.loads(self.rcv())
                 LOGGER.debug(f"received signal: {signal}")
                 if signal == consts.END_SIGNAL:
-                    LOGGER.info("end for training")
                     break
 
+        LOGGER.info("end for training")
+
+    def predict(self):
+        LOGGER.info("predict begin...")
+        LOGGER.debug("loading predict data")
+        predict_data_loader = FTLDataLoader(self.m_param.predict_data_path)
+
+        predict_ub_batchs = []
+        for i in range(
+            0, len(predict_data_loader.data_matrix), self.m_param.batch_size
+        ):
+            batch_start = i
+            batch_end = batch_start + self.m_param.batch_size
+            if batch_end > len(predict_data_loader.data_matrix):
+                batch_end = len(predict_data_loader.data_matrix)
+            x_batch = predict_data_loader.data_matrix[batch_start:batch_end]
+
+            # Net(x_batch)->predict_ub_batch
+            x_batch = torch.tensor(x_batch, dtype=torch.float32)
+            predict_ub_batch = self.forward(x_batch)
+            predict_ub_batchs += predict_ub_batch
+
+        # convert to numpy.array
+        predict_ub_batchs = np.array(
+            [x.detach().numpy() for x in predict_ub_batchs]
+        )
+
+        if self.m_param.mode == "plain":
+            # send to guest
+            self.send(pickle.dumps(predict_ub_batchs))
+            LOGGER.debug("host send predict ubs")
+            # receive results
+            results, accuracy = pickle.loads(self.rcv())
+            LOGGER.debug("host received predict results")
+            return results, accuracy
+
+        else:
+            assert False, "TODO"
