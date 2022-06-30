@@ -18,6 +18,7 @@ class FTLGuest(FTLBase):
         self.nc_ids = None  # N_c ids
         self.nc_indices = []  # N_c indices in dataset
         self.history_loss = []
+        self.history_accu = []
         self._not_available_lable_ids = set()
 
         self.__get_overlap_ids()
@@ -72,6 +73,9 @@ class FTLGuest(FTLBase):
             self.phi_A = self.phi_A + phi_batch if self.phi_A is not None else phi_batch
 
         self.phi_A /= len(self.data_loader.data_frame)
+        self.display("ua",self.ua)
+        self.display("phi_A",self.phi_A)
+        self.display("y",self.y)
 
     def __compute_guest_components(self):
         """
@@ -80,6 +84,7 @@ class FTLGuest(FTLBase):
 
         self.__get_guest_components()
         self.y_nc = self.y[self.nc_indices]
+        self.display("y nc",self.y_nc)
 
         # convert ua to numpy array
         self.ua_np = np.array([x.detach().numpy() for x in self.ua])
@@ -87,21 +92,27 @@ class FTLGuest(FTLBase):
         # get ua_nab and ua_nc
         self.ua_nab = self.ua_np[self.nab_indices]
         self.ua_nc = self.ua_np[self.nc_indices]
+        self.display("ua nc",self.ua_nc)
 
         h1_A = -1/2 * self.phi_A * np.dot(
             self.y_nc, np.ones_like(self.y_nc)
         ) + self.m_param.const_gamma * self.m_param.const_k * np.dot(
             np.ones(len(self.ua_nab)), self.ua_nab
         )
+        self.display("h1_A",h1_A)
 
         h2_A = 1/4 * np.dot(self.phi_A, self.phi_A)
+        self.display("h2_A",h2_A)
 
         L_part1 = len(self.y_nc) * np.log(2)
+        self.display("L_part1",L_part1)
         L_part4 = self.m_param.const_gamma * np.sum(self.ua_nab ** 2)
+        self.display("L_part4",L_part4)
 
         ua_nab_sum = np.dot(np.ones(len(self.ua_nab)), self.ua_nab)
 
         partial_ua_part4 = 2 * self.m_param.const_gamma * ua_nab_sum
+        self.display("partial_ua_part4",partial_ua_part4)
 
         return h1_A, h2_A, L_part1, L_part4, partial_ua_part4
 
@@ -169,10 +180,14 @@ class FTLGuest(FTLBase):
                 # compute and send the middle part
                 phi_ub = np.dot(self.phi_A, hB[1])
                 noise_phi_ub = self.__add_noise_ma1(phi_ub)
+                self.display("phi_ub",phi_ub)
+                self.display("noise_phi_ub",noise_phi_ub)
 
                 # compute partial_ub-
                 partial_ub_part2 = h2_A * hB[6]
                 partial_ub_minus = h1_A + partial_ub_part2
+                self.display("partial_ub_part2",partial_ub_part2)
+                self.display("partial_ub_minus",partial_ub_minus)
 
                 self.send(pickle.dumps((noise_phi_ub, partial_ub_minus)))
                 LOGGER.debug("guest send the middle part phi_ub and partial ub-")
@@ -183,6 +198,8 @@ class FTLGuest(FTLBase):
                 middle1, middle2 = self.__remove_noise_ma1(
                     noise_ma1_data, noise_ma1_2_data
                 )
+                self.display("middle1",middle1)
+                self.display("middle2",middle2)
 
                 L_part2 = -1/2 * np.dot(self.y_nc, phi_ub)
                 L_part5 = hB[5]
@@ -191,19 +208,29 @@ class FTLGuest(FTLBase):
                     * self.m_param.const_k
                     * (self.ua_nab * hB[2].T).sum()
                 )
+                self.display("L_part2",L_part2)
+                self.display("L_part5",L_part5)
+                self.display("L_part6",L_part6)
 
                 partial_ua_part1 = -1/2 / len(self.ua) * hB[6]
                 partial_ua_part3 = hB[4]
+                self.display("partial_ua_part1",partial_ua_part1)
+                self.display("partial_ua_part3",partial_ua_part3)
 
                 L_part3 = 1/8 * np.dot(np.ones_like(middle2), middle2)
+                self.display("L_part3",L_part3)
 
                 h_L = (L_part1 + L_part2 + L_part3 + L_part4 + L_part5 + L_part6)/len(self.ua_nab)
-                # h_L = L_part1 + L_part2 + L_part3 + L_part6
+                self.display("h_L",h_L)
+                # debug
+                # h_L = (L_part1 + L_part2 + L_part3 + L_part6)/len(self.ua_nab)
 
                 partial_ua_part2 = 1/4 / len(self.ua) * np.dot(self.y_nc, middle1)
                 h_partial_ua_minus = (
                     partial_ua_part1 + partial_ua_part2 + partial_ua_part3
                 )
+                self.display("partial_ua_part2",partial_ua_part2)
+                self.display("h_partial_ua_minus",h_partial_ua_minus)
 
                 # noise partial_ua -
                 noised_partial_ua_minus = self.__add_noise_ma2(h_partial_ua_minus)
@@ -218,13 +245,17 @@ class FTLGuest(FTLBase):
                 # compute partial_ua and update model
                 partial_ua_minus = self.__remove_noise_ma2(noised_partial_ua_minus)
                 partial_ua = partial_ua_minus + partial_ua_part4
-                partial_ua /= len(self.ua)
+                # debug
+                # partial_ua = partial_ua_minus
+                partial_ua /= len(self.ua_nab)
+                self.display("partial_ua",partial_ua)
                 self.__update_model(partial_ua)
 
             else:
                 ...
 
             self.history_loss.append(L)
+
 
             LOGGER.info(f"-----epoch {epoch} end, loss: {L}-----")
             if L < self.m_param.loss_tol:
@@ -238,9 +269,12 @@ class FTLGuest(FTLBase):
             else:
                 self.send(pickle.dumps(consts.CONTINUE_SIGNAL))
                 LOGGER.debug(f"send signal: {consts.CONTINUE_SIGNAL}")
+            
+            self.predict()
 
         LOGGER.info("end for training")
         LOGGER.debug(f"loss history: {self.history_loss}")
+        LOGGER.debug(f"history accuracy: {self.history_accu}")
 
     def set_not_available_lables(self, na_set):
         """
@@ -254,14 +288,31 @@ class FTLGuest(FTLBase):
         )
 
     def predict(self):
+        # init
+        # load data
+        predic_data_loader = FTLDataLoader(self.m_param.predict_data_path)
+        labels = predic_data_loader.labels
+        # get predict_phi_A
+        predict_phi_A = None
+        for i in range(0, len(predic_data_loader.data_frame), self.m_param.batch_size):
+            batch_start = i
+            batch_end = batch_start+self.m_param.batch_size
+            if batch_end > len(predic_data_loader.data_frame):
+                batch_end = len(predic_data_loader.data_frame)
+            x_batch = predic_data_loader.data_matrix[batch_start:batch_end]
+            x_batch = torch.tensor(x_batch, dtype=torch.float32)
+            ua_batch = self.forward(x_batch)
+            y_batch = labels[batch_start:batch_end]
+            phi_A_batch = np.dot(y_batch,ua_batch.detach().numpy())
+            predict_phi_A = predict_phi_A+phi_A_batch if predict_phi_A is not None else phi_A_batch
+        predict_phi_A/=len(predic_data_loader.data_frame)
+
         # receive predict ubs from host
         predict_ubs = pickle.loads(self.rcv())
         LOGGER.debug("predict ubs received")
-        results = np.dot(self.phi_A, predict_ubs.T)
+        results = np.dot(predict_phi_A, predict_ubs.T)
 
         # compute accuracy
-        predic_data_loader = FTLDataLoader(self.m_param.predict_data_path)
-        labels = predic_data_loader.labels
         correct_num = 0
         positive_num = 0
         assert len(results) == len(
@@ -273,6 +324,7 @@ class FTLGuest(FTLBase):
             if results[i] > 0 and labels[i] == 1 or results[i] < 0 and labels[i] == -1:
                 correct_num += 1
         accuracy = correct_num / len(results)
+        self.history_accu.append(accuracy)
         # send results, accuracy to host
         self.send(pickle.dumps((results, accuracy)))
         LOGGER.debug("guest send predict results")

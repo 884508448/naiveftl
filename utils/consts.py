@@ -18,5 +18,11 @@ CONTINUE_SIGNAL = "continue"
 PLAIN_MODE = "plain"
 ENCRYPTED_NODE = "encrypted"
 
-NET_DELAY=0.01
+NET_DELAY = 0.01
 
+DEBUG = False
+
+GAMMA = 1/10
+K=-5
+EPOCHS = 30
+BATCH_SIZE = -1

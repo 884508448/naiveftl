@@ -114,6 +114,9 @@ class FTLHost(FTLBase):
         for epoch in tqdm.tqdm(range(self.m_param.epochs)):
             LOGGER.info(f"-----epoch {epoch} begin-----")
             hB = self.__compute_hB()
+            # debug
+            for i in range(1,7):
+                self.display(f"hB[{i}]",hB[i])
 
             if self.m_param.mode == "plain":
                 # send hB to guest
@@ -131,9 +134,11 @@ class FTLHost(FTLBase):
 
                 # compute the first middle part
                 middle_part_1 = phi_ub_matrix * self.ub_nc
+                self.display("middle_part_1",middle_part_1)
 
                 # compute the second middle part
                 middle_part_2 = noise_phi_ub ** 2
+                self.display("middle_part_2",middle_part_2)
 
                 # send middle parts to guest
                 self.send(pickle.dumps((middle_part_1, middle_part_2)))
@@ -143,7 +148,10 @@ class FTLHost(FTLBase):
                 partial_ub = partial_ub_minus + 2 * self.m_param.const_gamma * np.dot(
                     np.ones(len(self.ub_nab_np)), self.ub_nab_np
                 )
+                # debug
+                # partial_ub = partial_ub_minus
                 partial_ub /= len(self.ub_nab)
+                self.display("partial_ub",partial_ub)
 
                 self.__update_model(gradients=partial_ub)
 
@@ -161,6 +169,8 @@ class FTLHost(FTLBase):
                 LOGGER.debug(f"received signal: {signal}")
                 if signal == consts.END_SIGNAL:
                     break
+                
+            self.predict()
 
         LOGGER.info("end for training")
 

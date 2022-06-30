@@ -43,6 +43,14 @@ class FTLBase:
         # self._messenger.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,True)
         LOGGER.debug("connection builded")
 
+    def display(self, name:str, obj):
+        """
+        debug util
+        """
+        if consts.DEBUG:
+            LOGGER.critical(f"{name}:\n{obj}")
+            input()
+
     def send(self, msg: bytes):
         # send msg length to partner
         msg_length=len(msg)
