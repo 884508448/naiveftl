@@ -16,9 +16,10 @@ g_p = {
     "const_gamma":consts.GAMMA,
     # "predict_data_path": "data/mini_nus_wide_validate_guest.csv",
     "predict_data_path": "data/nus_wide_validate_guest.csv",
-    "learning_rate":0.01,
-    "loss_tol":-100,
-    "batch_size":consts.BATCH_SIZE
+    "learning_rate":consts.LEARNING_RATE,
+    "loss_tol":0.01,
+    "batch_size":consts.BATCH_SIZE,
+    "mode":consts.MODE
 }
 guest_param = FTLParam(**g_p)
 
@@ -31,6 +32,4 @@ guest_ftl.add_nn_layer(layer=nn.Sigmoid())
 # guest_ftl.add_nn_layer(layer=nn.Sigmoid())
 guest_ftl.add_nn_layer(layer=nn.BatchNorm1d(num_features=32))
 
-
 guest_ftl.train()
-guest_ftl.predict()

@@ -18,7 +18,7 @@ def get_logger():
         __LOGGER = logging.getLogger()
         __LOGGER.setLevel(logging.DEBUG)
 
-        fileHandler = logging.FileHandler(f"data/ftl_log_{time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime())}.log", mode="w")
+        fileHandler = logging.FileHandler(f"logs/ftl_log_{time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime())}.log", mode="w")
         fileHandler.setLevel(logging.DEBUG)
         consoleHandler = colorlog.StreamHandler()
         consoleHandler.setLevel(colorlog.DEBUG)

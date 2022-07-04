@@ -2,7 +2,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-from utils.ftl_data_loader import FTLDataLoader
+from phe import paillier
+from time import time
+from functools import wraps
 
 # dt = FTLDataLoader("data/mini_nus_wide_train_host.csv")
 
@@ -23,3 +25,31 @@ from utils.ftl_data_loader import FTLDataLoader
 # out = model(torch.tensor(dt.data_matrix[0], dtype=torch.float32)).detach().numpy()
 # print(f"out: {out}")
 # print(f"out*out.T: {np.dot(out,out)}")
+
+def timer(func):
+    @wraps(func)
+    def decorated(*args,**kwargs):
+        start = time()
+        r=func()
+        time_cost = time()-start
+        print(f"time cost: {time_cost}")
+        return r
+    return decorated
+
+@timer
+def test():
+    public_key, private_key = paillier.generate_paillier_keypair()
+
+    for i in range(50):
+        x = 123.56
+        y = 456.78
+
+        x=public_key.encrypt(x)
+        y=public_key.encrypt(y)
+
+        z = x+y
+
+print(test())
+
+
+

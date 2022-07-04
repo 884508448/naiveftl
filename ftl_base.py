@@ -3,10 +3,12 @@ import utils.consts as consts
 import torch
 import pickle
 import time
+import numpy as np
 
 from ftl_param import FTLParam
 from utils.ftl_data_loader import FTLDataLoader
 from utils.ftl_log import LOGGER
+from typing import List
 
 
 class FTLBase:
@@ -42,6 +44,12 @@ class FTLBase:
             self._messenger: socket.socket = self.m_sock
         # self._messenger.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,True)
         LOGGER.debug("connection builded")
+
+    def encrypt(self, matrix: np.array):
+        if matrix is None:
+            return None
+        en_matrix = np.array([self._public_key.encrypt(x) for x in matrix.flatten().tolist()]).reshape(matrix.shape)
+        return en_matrix
 
     def display(self, name:str, obj):
         """
@@ -103,7 +111,16 @@ class FTLBase:
 
         LOGGER.debug(f"add layer {layer} successfully")
 
-    def set_optimizer(self, optimizer):
+    def set_optimizer(self, optimizer=None):
+        if optimizer is None:
+            LOGGER.info(
+                "optimizer has not been seted, it will be automatically seted as the default optimizer"
+            )
+            self.set_optimizer(
+                optimizer=torch.optim.Adam(self._nn_model.parameters(), lr=self.m_param.learning_rate)
+            )
+            return
+
         old_optimizer = self._optimizer
         self._optimizer = optimizer
         LOGGER.debug(
@@ -113,8 +130,8 @@ class FTLBase:
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self._nn_model(x)
 
-    def backward(self, predicts: torch.Tensor, gradients_tensor: torch.Tensor):
-        gradients_tensor = gradients_tensor.repeat(len(predicts),1)
+    def backward(self, predicts: List[torch.Tensor], gradients_tensor: torch.Tensor):
+        predicts = torch.stack(predicts)
         self._optimizer.zero_grad()
         predicts.backward(gradient=gradients_tensor)
         self._optimizer.step()

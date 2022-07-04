@@ -54,7 +54,7 @@ class FTLDataLoader:
         ), f"only supprots 2 classes of labels, but {label_set} is offered"
         if label_set != {-1, +1}:
             label_list = list(label_set)
-            LOGGER.info(
+            LOGGER.debug(
                 f"mapping label value {label_list[0]} to -1, {label_list[1]} to +1"
             )
             value_map = {label_list[0]: -1, label_list[1]: 1}

@@ -75,7 +75,7 @@ class FTLParam:
             raise ValueError("batch_size should be int")
 
         assert self.mode in (
-            consts.ENCRYPTED_NODE,
+            consts.ENCRYPTED_MODE,
             consts.PLAIN_MODE,
         ), f"mode options: encrypted or plain, but {self.mode} is offered"
 

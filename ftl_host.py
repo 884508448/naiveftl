@@ -9,6 +9,7 @@ from utils.ftl_log import LOGGER
 from phe import paillier
 from utils import consts
 from utils.ftl_data_loader import FTLDataLoader
+from utils.timer import timer
 
 
 class FTLHost(FTLBase):
@@ -20,6 +21,8 @@ class FTLHost(FTLBase):
         self.nc_indices = []  # nc indices refer to nab
 
         self.__get_overlap_id()
+        # generate key pair
+        self._public_key, self._private_key = paillier.generate_paillier_keypair()
         LOGGER.info("ftl host initialization finished")
 
     def __get_overlap_id(self):
@@ -43,7 +46,7 @@ class FTLHost(FTLBase):
         LOGGER.debug(f"nc indices: {self.nc_indices}")
 
     def __get_ub(self):
-        self.ub_nab = []
+        self.ub = []
         self.ub_batchs = []
         for i in range(0, len(self.nab_indices), self.m_param.batch_size):
             batch_start = i
@@ -57,120 +60,112 @@ class FTLHost(FTLBase):
             # Net(x_batch)->ub_batch
             x_batch = torch.tensor(x_batch, dtype=torch.float32)
             ub_batch = self.forward(x_batch)
-            self.ub_nab += ub_batch
+            self.ub += ub_batch
             self.ub_batchs.append(ub_batch)
 
+        self.ub_nab = [self.ub[index] for index in self.nab_indices]
         # convert ub to numpy.array
         self.ub_nab_np = np.array([x.detach().numpy() for x in self.ub_nab])
-        self.ub_nc = self.ub_nab_np[self.nc_indices]
+        self.ub_nc_np = self.ub_nab_np[self.nc_indices]
 
     def __compute_hB(self):
         self.__get_ub()
 
         # The preceding None placeholder makes the subscript same as in the formula
-        hB = [None] * 7
+        hB = [None] * 6
 
-        hB[1] = self.ub_nc.T
+        hB[1] = self.ub_nc_np.T
         hB[2] = self.ub_nab_np.T
         hB[3] = None  # ignore the regular term
-        hB[4] = (
-            self.m_param.const_gamma
-            * self.m_param.const_k
-            * np.dot(np.ones(len(self.ub_nab_np)), self.ub_nab_np)
-        )
-        hB[5] = self.m_param.const_gamma * (self.ub_nab_np ** 2).sum()
-        hB[6] = np.dot(np.ones(len(self.ub_nc)), self.ub_nc)
+        hB[4] = self.m_param.const_gamma * self.m_param.const_k * self.ub_nab_np
+        hB[5] = np.expand_dims(self.m_param.const_gamma * (self.ub_nab_np ** 2).sum(),axis=0)
+
+        if self.m_param.mode == consts.ENCRYPTED_MODE:
+            for i in range(1, 6):
+                hB[i] = self.encrypt(hB[i])
         return hB
 
     def __update_model(self, gradients):
         gradients = torch.tensor(gradients)
-        for ub_batch in self.ub_batchs:
-            self.backward(predicts=ub_batch, gradients_tensor=gradients)
+        self.backward(self.ub_nab, gradients_tensor=gradients)
 
-    def __encrypt(self):
-        pass
+    def __decrypt(self, en_matrix: np.array):
+        if en_matrix is None:
+            return None
+        de_matrix = np.array(
+            [self._private_key.decrypt(x) for x in en_matrix.flatten().tolist()]
+        ).reshape(en_matrix.shape)
+        return de_matrix
 
-    def __decrypt(self):
-        pass
+    @timer
+    def __one_epoch(self):
+        hB = self.__compute_hB()
 
+        # send hB to guest
+        self.send(pickle.dumps(hB))
+        LOGGER.debug("host send hB to guest")
+
+        noise_phi_ub, partial_ub_minus = pickle.loads(self.rcv())
+        LOGGER.debug(
+            "host received the middle part [[noise_phi_ub]] and [[partial_ub_minus]]"
+        )
+
+        if self.m_param.mode == consts.ENCRYPTED_MODE:
+            noise_phi_ub = self.__decrypt(noise_phi_ub)
+            partial_ub_minus = self.__decrypt(partial_ub_minus)
+
+        # compute the middle part
+        middle_part = noise_phi_ub ** 2
+
+        if self.m_param.mode == consts.ENCRYPTED_MODE:
+            middle_part = self.encrypt(middle_part)
+        # send middle part to guest
+        self.send(pickle.dumps(middle_part))
+        LOGGER.debug("host send the middle part")
+
+        # compute partial ub and update the model
+        partial_ub = partial_ub_minus + 2 * self.m_param.const_gamma * self.ub_nab_np
+
+        self.__update_model(gradients=partial_ub)
+
+        # receive [[L]] and [[noised_partial_ua-]]
+        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(self.rcv())
+        LOGGER.debug(
+            "host received [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]]"
+        )
+
+        if self.m_param.mode == consts.ENCRYPTED_MODE:
+            L, noised_partial_ua_minus, noised_partial_ua_non = (
+                self.__decrypt(L),
+                self.__decrypt(noised_partial_ua_minus),
+                self.__decrypt(noised_partial_ua_non),
+            )
+
+        self.send(pickle.dumps((L, noised_partial_ua_minus, noised_partial_ua_non)))
+        LOGGER.debug("host send L and noised_partial_ua_minus")
+        return L
+
+    @timer
     def train(self):
-
         # check optimizer for the model
         if self._optimizer is None:
-            LOGGER.info(
-                "optimizer has not been seted, it will be automatically seted as the default optimizer"
-            )
-            self.set_optimizer(
-                optimizer=torch.optim.Adam(self._nn_model.parameters(), lr=self.m_param.learning_rate)
-            )
+            self.set_optimizer()
 
-        # generate key pair
-        self._public_key, self._private_key = paillier.generate_paillier_keypair()
         # send public key to guest
         self.send(pickle.dumps(self._public_key))
         LOGGER.debug("send public key to guest")
 
         LOGGER.info(f"host training, mode: {self.m_param.mode}")
         for epoch in tqdm.tqdm(range(self.m_param.epochs)):
-            LOGGER.info(f"-----epoch {epoch} begin-----")
-            hB = self.__compute_hB()
-            # debug
-            for i in range(1,7):
-                self.display(f"hB[{i}]",hB[i])
-
-            if self.m_param.mode == "plain":
-                # send hB to guest
-                self.send(pickle.dumps(hB))
-                LOGGER.debug("host send hB to guest")
-
-                noise_phi_ub, partial_ub_minus = pickle.loads(self.rcv())
-                LOGGER.debug(
-                    "host received the middle part phi_ub and encrypted partial ub-"
-                )
-
-                # expand into a matrix of the same shape as ub_nc
-                phi_ub_matrix = np.expand_dims(noise_phi_ub, axis=0)
-                phi_ub_matrix = phi_ub_matrix.repeat(len(self.ub_nc[0]), axis=0).T
-
-                # compute the first middle part
-                middle_part_1 = phi_ub_matrix * self.ub_nc
-                self.display("middle_part_1",middle_part_1)
-
-                # compute the second middle part
-                middle_part_2 = noise_phi_ub ** 2
-                self.display("middle_part_2",middle_part_2)
-
-                # send middle parts to guest
-                self.send(pickle.dumps((middle_part_1, middle_part_2)))
-                LOGGER.debug("host send the two middle parts")
-
-                # compute partial ub and update the model
-                partial_ub = partial_ub_minus + 2 * self.m_param.const_gamma * np.dot(
-                    np.ones(len(self.ub_nab_np)), self.ub_nab_np
-                )
-                # debug
-                # partial_ub = partial_ub_minus
-                partial_ub /= len(self.ub_nab)
-                self.display("partial_ub",partial_ub)
-
-                self.__update_model(gradients=partial_ub)
-
-                # receive encrypted L and noised partial ua-
-                h_L, h_noised_partial_ua_minus = pickle.loads(self.rcv())
-                LOGGER.debug("host received encrypted L and noised partial ua-")
-
-                L, noised_partial_ua_minus = h_L, h_noised_partial_ua_minus
-                self.send(pickle.dumps((L, noised_partial_ua_minus)))
-                LOGGER.debug("host send L and noised partial ua-")
-                LOGGER.info(f"-----epoch {epoch} end, loss: {L}-----")
-
-                # receive stop signal
-                signal = pickle.loads(self.rcv())
-                LOGGER.debug(f"received signal: {signal}")
-                if signal == consts.END_SIGNAL:
-                    break
-                
+            LOGGER.debug(f"-----epoch {epoch} begin-----")
+            L = self.__one_epoch()
+            LOGGER.debug(f"-----epoch {epoch} end, loss: {L}-----")
             self.predict()
+            # receive stop signal
+            signal = pickle.loads(self.rcv())
+            LOGGER.debug(f"received signal: {signal}")
+            if signal == consts.END_SIGNAL:
+                break
 
         LOGGER.info("end for training")
 
@@ -195,18 +190,14 @@ class FTLHost(FTLBase):
             predict_ub_batchs += predict_ub_batch
 
         # convert to numpy.array
-        predict_ub_batchs = np.array(
-            [x.detach().numpy() for x in predict_ub_batchs]
-        )
+        predict_ub_batchs = np.array([x.detach().numpy() for x in predict_ub_batchs])
 
-        if self.m_param.mode == "plain":
-            # send to guest
-            self.send(pickle.dumps(predict_ub_batchs))
-            LOGGER.debug("host send predict ubs")
-            # receive results
-            results, accuracy = pickle.loads(self.rcv())
-            LOGGER.debug("host received predict results")
-            return results, accuracy
+        # send to guest
+        self.send(pickle.dumps(predict_ub_batchs))
+        LOGGER.debug("host send predict ubs")
+        # receive results
+        results, accuracy = pickle.loads(self.rcv())
+        LOGGER.debug("host received predict results")
+        return results, accuracy
 
-        else:
-            assert False, "TODO"
+
