@@ -7,7 +7,7 @@ from ftl_base import FTLBase
 from ftl_param import FTLParam
 from utils.ftl_log import LOGGER
 from phe import paillier
-from utils import consts
+from utils import config
 from utils.ftl_data_loader import FTLDataLoader
 from utils.timer import timer
 
@@ -21,7 +21,7 @@ class FTLHost(FTLBase):
         self.nc_indices = []  # nc indices refer to nab
 
         self.__get_overlap_id()
-        # generate key pair
+        # generate key pairx
         self._public_key, self._private_key = paillier.generate_paillier_keypair()
         LOGGER.info("ftl host initialization finished")
 
@@ -48,9 +48,12 @@ class FTLHost(FTLBase):
     def __get_ub(self):
         self.ub = []
         self.ub_batchs = []
-        for i in range(0, len(self.nab_indices), self.m_param.batch_size):
+        batch_size = self.m_param.batch_size
+        if batch_size == -1:
+            batch_size = len(self.data_loader.data_frame)
+        for i in range(0, len(self.nab_indices), batch_size):
             batch_start = i
-            batch_end = batch_start + self.m_param.batch_size
+            batch_end = batch_start + batch_size
             if batch_end > len(self.nab_indices):
                 batch_end = len(self.nab_indices)
             x_batch = self.data_loader.data_matrix[
@@ -80,7 +83,7 @@ class FTLHost(FTLBase):
         hB[4] = self.m_param.const_gamma * self.m_param.const_k * self.ub_nab_np
         hB[5] = np.expand_dims(self.m_param.const_gamma * (self.ub_nab_np ** 2).sum(),axis=0)
 
-        if self.m_param.mode == consts.ENCRYPTED_MODE:
+        if self.m_param.mode == config.ENCRYPTED_MODE:
             for i in range(1, 6):
                 hB[i] = self.encrypt(hB[i])
         return hB
@@ -110,14 +113,14 @@ class FTLHost(FTLBase):
             "host received the middle part [[noise_phi_ub]] and [[partial_ub_minus]]"
         )
 
-        if self.m_param.mode == consts.ENCRYPTED_MODE:
+        if self.m_param.mode == config.ENCRYPTED_MODE:
             noise_phi_ub = self.__decrypt(noise_phi_ub)
             partial_ub_minus = self.__decrypt(partial_ub_minus)
 
         # compute the middle part
         middle_part = noise_phi_ub ** 2
 
-        if self.m_param.mode == consts.ENCRYPTED_MODE:
+        if self.m_param.mode == config.ENCRYPTED_MODE:
             middle_part = self.encrypt(middle_part)
         # send middle part to guest
         self.send(pickle.dumps(middle_part))
@@ -134,7 +137,7 @@ class FTLHost(FTLBase):
             "host received [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]]"
         )
 
-        if self.m_param.mode == consts.ENCRYPTED_MODE:
+        if self.m_param.mode == config.ENCRYPTED_MODE:
             L, noised_partial_ua_minus, noised_partial_ua_non = (
                 self.__decrypt(L),
                 self.__decrypt(noised_partial_ua_minus),
@@ -164,7 +167,7 @@ class FTLHost(FTLBase):
             # receive stop signal
             signal = pickle.loads(self.rcv())
             LOGGER.debug(f"received signal: {signal}")
-            if signal == consts.END_SIGNAL:
+            if signal == config.END_SIGNAL:
                 break
 
         LOGGER.info("end for training")
@@ -175,17 +178,21 @@ class FTLHost(FTLBase):
         predict_data_loader = FTLDataLoader(self.m_param.predict_data_path)
 
         predict_ub_batchs = []
+        batch_size = self.m_param.batch_size
+        if batch_size == -1:
+            batch_size = len(predict_data_loader.data_frame)
         for i in range(
-            0, len(predict_data_loader.data_matrix), self.m_param.batch_size
+            0, len(predict_data_loader.data_matrix), batch_size
         ):
             batch_start = i
-            batch_end = batch_start + self.m_param.batch_size
+            batch_end = batch_start + batch_size
             if batch_end > len(predict_data_loader.data_matrix):
                 batch_end = len(predict_data_loader.data_matrix)
             x_batch = predict_data_loader.data_matrix[batch_start:batch_end]
 
             # Net(x_batch)->predict_ub_batch
             x_batch = torch.tensor(x_batch, dtype=torch.float32)
+            LOGGER.debug(f"x_batch: {x_batch}")
             predict_ub_batch = self.forward(x_batch)
             predict_ub_batchs += predict_ub_batch
 

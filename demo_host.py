@@ -1,27 +1,31 @@
 import torch
-import torch.nn as nn
 
+from torch import nn
 from ftl_host import FTLHost
 from ftl_param import FTLParam
-from utils import consts
-
+from utils import config
 
 h_p = {
-    "partner_addr": (consts.DEFAULT_IP, consts.GUEST_DEFAULT_PORT),
-    "role": "host",
-    # "data_path": "data/mini_nus_wide_train_host.csv",
-    "data_path": "data/nus_wide_train_host.csv",
-    # "data_path": "data/nus_wide_validate_host.csv",
-    "epochs":consts.EPOCHS,
-    "const_k":consts.K,
-    "const_gamma":consts.GAMMA,
-    # "predict_data_path": "data/mini_nus_wide_validate_host.csv",
-    "predict_data_path": "data/nus_wide_validate_host.csv",
-    "learning_rate":consts.LEARNING_RATE,
-    "loss_tol":0.01,
-    "batch_size":consts.BATCH_SIZE,
-    "mode":consts.MODE
+    "partner_addr": (config.DEFAULT_IP, config.GUEST_DEFAULT_PORT),
+    "role": config.HOST,
+    "epochs":config.EPOCHS,
+    "const_k":config.K,
+    "const_gamma":config.GAMMA,
+    "learning_rate":config.LEARNING_RATE,
+    "loss_tol":config.LOSS_TOLERANCE,
+    "batch_size":config.BATCH_SIZE,
+    "mode":config.MODE
 }
+if config.MINI_TEST:
+    h_p.update({
+        "data_path": config.MINI_HOST_TRAIN_DATA_PATH,
+        "predict_data_path": config.MINI_HOST_VALIDATE_DATA_PATH,
+    })
+else:
+    h_p.update({
+        "data_path": config.HOST_TRAIN_DATA_PATH,
+        "predict_data_path": config.HOST_VALIDATE_DATA_PATH,
+    })
 host_param = FTLParam(**h_p)
 
 host_ftl = FTLHost(host_param)
@@ -30,8 +34,7 @@ host_ftl.add_nn_layer(
     layer=nn.Linear(in_features=1000, out_features=32, dtype=torch.float32)
 )
 host_ftl.add_nn_layer(layer=nn.Sigmoid())
-# host_ftl.add_nn_layer(layer=nn.Linear(in_features=32, out_features=32, dtype=torch.float32))
-# host_ftl.add_nn_layer(layer=nn.Sigmoid())
+host_ftl.add_nn_layer(layer=nn.Linear(in_features=32, out_features=32, dtype=torch.float32))
+host_ftl.add_nn_layer(layer=nn.Sigmoid())
 host_ftl.add_nn_layer(layer=nn.BatchNorm1d(num_features=32))
 host_ftl.train()
-

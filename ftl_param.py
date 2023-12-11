@@ -1,6 +1,6 @@
 import os
 
-from utils import consts
+from utils import config
 
 
 class FTLParam:
@@ -75,8 +75,8 @@ class FTLParam:
             raise ValueError("batch_size should be int")
 
         assert self.mode in (
-            consts.ENCRYPTED_MODE,
-            consts.PLAIN_MODE,
+            config.ENCRYPTED_MODE,
+            config.PLAIN_MODE,
         ), f"mode options: encrypted or plain, but {self.mode} is offered"
 
         if self.predict_data_path is not None and not os.path.exists(self.predict_data_path):

@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 import numpy as np
 
@@ -28,13 +27,14 @@ from functools import wraps
 
 def timer(func):
     @wraps(func)
-    def decorated(*args,**kwargs):
+    def decorated(*args, **kwargs):
         start = time()
-        r=func()
+        r = func()
         time_cost = time()-start
         print(f"time cost: {time_cost}")
         return r
     return decorated
+
 
 @timer
 def test():
@@ -44,12 +44,10 @@ def test():
         x = 123.56
         y = 456.78
 
-        x=public_key.encrypt(x)
-        y=public_key.encrypt(y)
+        x = public_key.encrypt(x)
+        y = public_key.encrypt(y)
 
         z = x+y
 
+
 print(test())
-
-
-

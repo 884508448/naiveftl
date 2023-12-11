@@ -7,7 +7,7 @@ from ftl_base import FTLBase
 from ftl_param import FTLParam
 from utils.ftl_data_loader import FTLDataLoader
 from utils.ftl_log import LOGGER
-from utils import consts
+from utils import config
 from utils.timer import timer
 
 
@@ -60,9 +60,12 @@ class FTLGuest(FTLBase):
         self.ua = []  # ua saves torch tensors
         self.phi_A = None
         self.y = np.array([])
-        for i in range(0, len(self.data_loader.data_frame), self.m_param.batch_size):
+        batch_size = self.m_param.batch_size
+        if batch_size == -1:
+            batch_size = len(self.data_loader.data_frame)
+        for i in range(0, len(self.data_loader.data_frame), batch_size):
             batch_start = i
-            batch_end = batch_start + self.m_param.batch_size
+            batch_end = batch_start + batch_size
             if batch_end > len(self.data_loader.data_frame):
                 batch_end = len(self.data_loader.data_frame)
             x_batch = self.data_loader.data_matrix[batch_start:batch_end]
@@ -115,7 +118,7 @@ class FTLGuest(FTLBase):
 
         partial_ua_part4 = 2 * self.m_param.const_gamma * self.ua_nc
 
-        if self.m_param.mode == consts.ENCRYPTED_MODE:
+        if self.m_param.mode == config.ENCRYPTED_MODE:
             h1_A, L_part1, L_part4 = (
                 self.encrypt(h1_A),
                 self.encrypt(L_part1),
@@ -284,13 +287,13 @@ class FTLGuest(FTLBase):
                 LOGGER.info(
                     f"the loss {L} is smaller than the loss tolerance {self.m_param.loss_tol}"
                 )
-                self.send(pickle.dumps(consts.END_SIGNAL))
-                LOGGER.debug(f"send signal: {consts.END_SIGNAL}")
+                self.send(pickle.dumps(config.END_SIGNAL))
+                LOGGER.debug(f"send signal: {config.END_SIGNAL}")
                 break
 
             else:
-                self.send(pickle.dumps(consts.CONTINUE_SIGNAL))
-                LOGGER.debug(f"send signal: {consts.CONTINUE_SIGNAL}")
+                self.send(pickle.dumps(config.CONTINUE_SIGNAL))
+                LOGGER.debug(f"send signal: {config.CONTINUE_SIGNAL}")
 
 
         LOGGER.info("end for training")
@@ -315,9 +318,12 @@ class FTLGuest(FTLBase):
         labels = predic_data_loader.labels
         # get predict_phi_A
         predict_phi_A = None
-        for i in range(0, len(predic_data_loader.data_frame), self.m_param.batch_size):
+        batch_size = self.m_param.batch_size
+        if batch_size == -1:
+            batch_size = len(predic_data_loader.data_frame)
+        for i in range(0, len(predic_data_loader.data_frame), batch_size):
             batch_start = i
-            batch_end = batch_start + self.m_param.batch_size
+            batch_end = batch_start + batch_size
             if batch_end > len(predic_data_loader.data_frame):
                 batch_end = len(predic_data_loader.data_frame)
             x_batch = predic_data_loader.data_matrix[batch_start:batch_end]
@@ -340,6 +346,8 @@ class FTLGuest(FTLBase):
         # compute accuracy
         correct_num = 0
         positive_num = 0
+        LOGGER.debug(f"results: {results}")
+        LOGGER.debug(f"labels: {labels}")
         assert len(results) == len(
             labels
         ), "the results length not equal to lables length"

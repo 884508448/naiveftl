@@ -1,9 +1,10 @@
 import socket
-import utils.consts as consts
+import utils.config as config
 import torch
 import pickle
 import time
 import numpy as np
+import struct
 
 from ftl_param import FTLParam
 from utils.ftl_data_loader import FTLDataLoader
@@ -21,8 +22,6 @@ class FTLBase:
 
         LOGGER.debug("loading data")
         self.data_loader = FTLDataLoader(self.m_param.data_path)
-        if self.m_param.batch_size == -1:
-            self.m_param.batch_size = len(self.data_loader.data_frame)
 
         LOGGER.debug("building connection")
         self.__init_socket()
@@ -30,8 +29,8 @@ class FTLBase:
     def __init_socket(self):
         self.m_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.m_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if self.m_param.role == consts.GUEST:
-            self.m_sock.bind((consts.DEFAULT_IP, consts.GUEST_DEFAULT_PORT),)
+        if self.m_param.role == config.GUEST:
+            self.m_sock.bind((config.DEFAULT_IP, config.GUEST_DEFAULT_PORT),)
             self.m_sock.listen()
             conn, addr = self.m_sock.accept()
             assert (
@@ -39,74 +38,58 @@ class FTLBase:
             ), f"get connection from: {addr}, not equal to offered: {self.m_param.partner_addr}"
             self._messenger: socket.socket = conn
         else:
-            self.m_sock.bind((consts.DEFAULT_IP, consts.HOST_DEFAULT_PORT))
+            self.m_sock.bind((config.DEFAULT_IP, config.HOST_DEFAULT_PORT))
             self.m_sock.connect(self.m_param.partner_addr)
             self._messenger: socket.socket = self.m_sock
-        # self._messenger.setsockopt(socket.IPPROTO_TCP,socket.TCP_NODELAY,True)
         LOGGER.debug("connection builded")
 
     def encrypt(self, matrix: np.array):
         if matrix is None:
             return None
-        en_matrix = np.array([self._public_key.encrypt(x) for x in matrix.flatten().tolist()]).reshape(matrix.shape)
+        en_matrix = np.array([self._public_key.encrypt(x)
+                             for x in matrix.flatten().tolist()]).reshape(matrix.shape)
         return en_matrix
 
-    def display(self, name:str, obj):
+    def display(self, name: str, obj):
         """
         debug util
         """
-        if consts.DEBUG:
+        if config.DEBUG:
             LOGGER.critical(f"{name}:\n{obj}")
             input()
 
     def send(self, msg: bytes):
-        # send msg length to partner
-        msg_length=len(msg)
-        self._messenger.sendall(pickle.dumps(msg_length))
-        LOGGER.debug(f"send msg length: {msg_length}")
-        # sending too fast can cause occasional packet loss, the same as below
-        time.sleep(consts.NET_DELAY)
+        msg_length = struct.pack("!Q", len(msg))
 
-        # avoid continuous send
-        received_msg_length = pickle.loads(self._messenger.recv(consts.DEFAULT_BUFFER_SIZE))
-        assert received_msg_length == msg_length
-        LOGGER.debug(f"assert msg length: {msg_length}")
-        time.sleep(consts.NET_DELAY)
-
-        # send msg to partner
-        self._messenger.sendall(msg)
-        LOGGER.debug(f"send msg")
-        time.sleep(consts.NET_DELAY)
-
-        # avoid continuous send
-        received_length = pickle.loads(self._messenger.recv(consts.DEFAULT_BUFFER_SIZE))
-        assert received_length == msg_length
-        LOGGER.debug("finished send")
-        time.sleep(consts.NET_DELAY)
+        # send message length before the raw message to avoid sticky
+        self._messenger.sendall(msg_length + msg)
+        LOGGER.debug(f"send {len(msg)} bytes")
 
     def rcv(self):
-        LOGGER.debug("begin to receive")
-        # receive msg length
-        msg_length = pickle.loads(self._messenger.recv(consts.DEFAULT_BUFFER_SIZE))
-        LOGGER.debug(f"received msg length: {msg_length}")
-        time.sleep(consts.NET_DELAY)
-        self._messenger.sendall(pickle.dumps(msg_length))
-        time.sleep(consts.NET_DELAY)
+        # receive 8 bytes message length
+        length_data = self._messenger.recv(8)
+        if not length_data:
+            return None
 
-        msg = self._messenger.recv(consts.DEFAULT_BUFFER_SIZE)
-        time.sleep(consts.NET_DELAY)
-        # receive msg from partner, the buffer size is defined in consts.py
-        while len(msg) < msg_length:
-            msg+=self._messenger.recv(consts.DEFAULT_BUFFER_SIZE)
-            LOGGER.debug(f"received size: {len(msg)}")
-        LOGGER.debug("received msg")
-        time.sleep(consts.NET_DELAY)
-        self._messenger.sendall(pickle.dumps(len(msg)))
-        time.sleep(consts.NET_DELAY)
-        return msg
+        msg_length = struct.unpack("!Q", length_data)[0]
+
+        # receive message refer to msg_length
+        data = b""
+
+        while len(data) < msg_length:
+            remaining = msg_length - len(data)
+            received = self._messenger.recv(remaining)
+
+            if not received:
+                return None
+
+            data += received
+
+        return data
 
     def add_nn_layer(self, layer):
-        self._nn_model.add_module(name=f"layer {self._layer_index}", module=layer)
+        self._nn_model.add_module(
+            name=f"layer {self._layer_index}", module=layer)
         self._layer_index += 1
 
         LOGGER.debug(f"add layer {layer} successfully")
@@ -117,7 +100,8 @@ class FTLBase:
                 "optimizer has not been seted, it will be automatically seted as the default optimizer"
             )
             self.set_optimizer(
-                optimizer=torch.optim.Adam(self._nn_model.parameters(), lr=self.m_param.learning_rate)
+                optimizer=torch.optim.Adam(
+                    self._nn_model.parameters(), lr=self.m_param.learning_rate)
             )
             return
 
@@ -137,7 +121,9 @@ class FTLBase:
         self._optimizer.step()
 
     def save_model(self):
-        pickle.dump(self._nn_model,open(f"data/{self.m_param.role}_model","w"))
+        pickle.dump(self._nn_model, open(
+            f"data/{self.m_param.role}_model", "w"))
 
     def load_model(self):
-        self._nn_model = pickle.load(open(f"data/{self.m_param.role}_model","r"))
+        self._nn_model = pickle.load(
+            open(f"data/{self.m_param.role}_model", "r"))

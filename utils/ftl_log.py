@@ -1,6 +1,9 @@
 import logging
 import colorlog
 import time
+import sys
+import os
+
 
 __LOGGER = None
 log_colors_config = {
@@ -18,7 +21,11 @@ def get_logger():
         __LOGGER = logging.getLogger()
         __LOGGER.setLevel(logging.DEBUG)
 
-        fileHandler = logging.FileHandler(f"logs/ftl_log_{time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime())}.log", mode="w")
+
+        script_name = os.path.basename(sys.argv[0])
+        script_name_without_extension = os.path.splitext(script_name)[0]
+        
+        fileHandler = logging.FileHandler(f"logs/ftl_log_{{{script_name_without_extension}}}_{time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime())}.log", mode="w")
         fileHandler.setLevel(logging.DEBUG)
         consoleHandler = colorlog.StreamHandler()
         consoleHandler.setLevel(colorlog.DEBUG)
@@ -39,7 +46,7 @@ def get_logger():
         __LOGGER.addHandler(fileHandler)
         __LOGGER.addHandler(consoleHandler)
 
-        __LOGGER.debug("LOGGER initialized")
+        __LOGGER.debug(f"{script_name_without_extension} LOGGER initialized")
         return __LOGGER
 
     else:
