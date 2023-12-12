@@ -68,14 +68,15 @@ class FTLBase:
     def rcv(self):
         # receive 8 bytes message length
         length_data = self._messenger.recv(8)
-        if not length_data:
+        if length_data is None:
+            LOGGER.error("received None length_data")
             return None
 
         msg_length = struct.unpack("!Q", length_data)[0]
+        LOGGER.debug(f"received msg_length: {msg_length}")
 
         # receive message refer to msg_length
         data = b""
-
         while len(data) < msg_length:
             remaining = msg_length - len(data)
             received = self._messenger.recv(remaining)
@@ -85,6 +86,7 @@ class FTLBase:
 
             data += received
 
+        LOGGER.debug(f"received {msg_length} bytes")
         return data
 
     def add_nn_layer(self, layer):

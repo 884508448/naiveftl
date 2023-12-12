@@ -18,8 +18,8 @@ CONTINUE_SIGNAL = "continue"
 PLAIN_MODE = "plain"
 ENCRYPTED_MODE = "encrypted"
 
-MODE = PLAIN_MODE
-# MODE = ENCRYPTED_MODE
+# MODE = PLAIN_MODE
+MODE = ENCRYPTED_MODE
 
 NET_DELAY = 0.01
 
@@ -32,8 +32,8 @@ BATCH_SIZE = -1
 LEARNING_RATE = 0.01
 LOSS_TOLERANCE = -100
 
-MINI_TEST = True
-# MINI_TEST = False
+# MINI_TEST = True
+MINI_TEST = False
 
 MINI_GUEST_TRAIN_DATA_PATH = "data/mini_nus_wide_train_guest.csv"
 MINI_HOST_TRAIN_DATA_PATH = "data/mini_nus_wide_train_host.csv"

@@ -84,8 +84,10 @@ class FTLGuest(FTLBase):
 
         self.phi_A /= len(self.data_loader.data_frame)
         self.ua_nab = [self.ua[index] for index in self.nab_indices]
-        self.ua_nab_np = np.array([tensor.detach().numpy() for tensor in self.ua_nab])
-        self.ua_non_overlap = [self.ua[index] for index in self.non_overlap_indices]
+        self.ua_nab_np = np.array([tensor.detach().numpy()
+                                  for tensor in self.ua_nab])
+        self.ua_non_overlap = [self.ua[index]
+                               for index in self.non_overlap_indices]
 
     def __compute_guest_components(self):
         """
@@ -106,7 +108,8 @@ class FTLGuest(FTLBase):
             -1
             / 2
             * np.dot(
-                np.expand_dims(self.y_nc, axis=1), np.expand_dims(self.phi_A, axis=0)
+                np.expand_dims(self.y_nc, axis=1), np.expand_dims(
+                    self.phi_A, axis=0)
             )
             + self.m_param.const_gamma * self.m_param.const_k * self.ua_nc
         )
@@ -159,9 +162,10 @@ class FTLGuest(FTLBase):
     def __update_model(self, gradients, gradients_non):
         self.backward(
             predicts=self.ua_nab + self.ua_non_overlap,
-            gradients_tensor=torch.tensor(np.concatenate([gradients, gradients_non])),
+            gradients_tensor=torch.tensor(
+                np.concatenate([gradients, gradients_non])),
         )
-    
+
     @timer
     def __one_epoch(self):
         (
@@ -184,14 +188,15 @@ class FTLGuest(FTLBase):
         partial_ub_minus = h1_A + partial_ub_part2
 
         self.send(pickle.dumps((noise_phi_ub, partial_ub_minus)))
-        LOGGER.debug("guest send the middle part [[noise_phi_ub]] and partial [[ub-]]")
+        LOGGER.debug(
+            "guest send the middle part [[noise_phi_ub]] and partial [[ub-]]")
 
         # receive middle part from host
         noise_ma1_2_data = pickle.loads(self.rcv())
         LOGGER.debug("guest received the middle part")
         middle = self.__remove_noise_ma1(noise_ma1_2_data)
 
-        L_part2 = -1 / 2 * np.dot(np.expand_dims(self.y_nc,axis=0), phi_ub)
+        L_part2 = -1 / 2 * np.dot(np.expand_dims(self.y_nc, axis=0), phi_ub)
         L_part5 = hB[5]
         L_part6 = np.array(
             self.m_param.const_gamma
@@ -199,7 +204,8 @@ class FTLGuest(FTLBase):
             * (self.ua_nab_np * hB[2].T).sum()
         )
 
-        L_part3 = 1 / 8 * np.dot(np.expand_dims(np.ones_like(middle),axis=0), middle)
+        L_part3 = 1 / 8 * \
+            np.dot(np.expand_dims(np.ones_like(middle), axis=0), middle)
 
         h_L = (L_part1 + L_part2 + L_part3 + L_part4 + L_part5 + L_part6) / len(
             self.ua_nab_np
@@ -211,7 +217,8 @@ class FTLGuest(FTLBase):
             -0.5
             / len(self.y)
             * np.dot(
-                np.expand_dims(self.y_nc, axis=1), np.expand_dims(y_ub_sum, axis=0)
+                np.expand_dims(self.y_nc, axis=1), np.expand_dims(
+                    y_ub_sum, axis=0)
             )
         )
         partial_ua_part3 = hB[4]
@@ -221,7 +228,8 @@ class FTLGuest(FTLBase):
             * hB[5]
             / self.m_param.const_gamma
             * np.dot(
-                np.expand_dims(self.y_nc, axis=1), np.expand_dims(self.phi_A, axis=0)
+                np.expand_dims(self.y_nc, axis=1), np.expand_dims(
+                    self.phi_A, axis=0)
             )
         )
         h_partial_ua_minus = partial_ua_part1 + partial_ua_part2 + partial_ua_part3
@@ -251,12 +259,16 @@ class FTLGuest(FTLBase):
         h_noised_partial_ua_minus = self.__add_noise_ma2(h_partial_ua_minus)
         h_noised_partial_ua_non = self.__add_noise_ma3(h_partial_ua_non)
         # send the [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]] to host
-        self.send(pickle.dumps((h_L, h_noised_partial_ua_minus, h_noised_partial_ua_non)))
-        LOGGER.debug("guest send [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]]")
+        self.send(pickle.dumps(
+            (h_L, h_noised_partial_ua_minus, h_noised_partial_ua_non)))
+        LOGGER.debug(
+            "guest send [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]]")
 
         # receive L, noised partial_ua-
-        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(self.rcv())
-        LOGGER.debug("guest received L, noised_partial_ua_minus, noised_partial_ua_non")
+        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(
+            self.rcv())
+        LOGGER.debug(
+            "guest received L, noised_partial_ua_minus, noised_partial_ua_non")
 
         # compute partial_ua and update model
         partial_ua_minus = self.__remove_noise_ma2(noised_partial_ua_minus)
@@ -294,7 +306,6 @@ class FTLGuest(FTLBase):
             else:
                 self.send(pickle.dumps(config.CONTINUE_SIGNAL))
                 LOGGER.debug(f"send signal: {config.CONTINUE_SIGNAL}")
-
 
         LOGGER.info("end for training")
         LOGGER.debug(f"loss history: {self.history_loss}")
@@ -364,4 +375,3 @@ class FTLGuest(FTLBase):
         LOGGER.debug(
             f"positive num: {positive_num}, negative num: {len(results)-positive_num}"
         )
-

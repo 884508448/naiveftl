@@ -36,6 +36,12 @@ guest_ftl.add_nn_layer(layer=nn.Sigmoid())
 guest_ftl.add_nn_layer(layer=nn.Linear(
     in_features=32, out_features=32, dtype=torch.float32))
 guest_ftl.add_nn_layer(layer=nn.Sigmoid())
+guest_ftl.add_nn_layer(layer=nn.Linear(
+    in_features=32, out_features=32, dtype=torch.float32))
+guest_ftl.add_nn_layer(layer=nn.Sigmoid())
+guest_ftl.add_nn_layer(layer=nn.Linear(
+    in_features=32, out_features=32, dtype=torch.float32))
+guest_ftl.add_nn_layer(layer=nn.Sigmoid())
 guest_ftl.add_nn_layer(layer=nn.BatchNorm1d(num_features=32))
 
 guest_ftl.train()
