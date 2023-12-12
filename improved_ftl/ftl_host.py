@@ -102,11 +102,12 @@ class FTLHost(FTLBase):
 
     @timer
     def __one_epoch(self):
+        LOGGER.debug("computing hBs ...")
         hB = self.__compute_hB()
 
         # send hB to guest
         self.send(pickle.dumps(hB))
-        LOGGER.debug("host send hB to guest")
+        LOGGER.debug("host send hBs to guest")
 
         noise_phi_ub, partial_ub_minus = pickle.loads(self.rcv())
         LOGGER.debug(

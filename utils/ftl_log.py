@@ -4,6 +4,7 @@ import time
 import sys
 import os
 
+from utils import config
 
 __LOGGER = None
 log_colors_config = {
@@ -25,7 +26,7 @@ def get_logger():
         script_name = os.path.basename(sys.argv[0])
         script_name_without_extension = os.path.splitext(script_name)[0]
         
-        fileHandler = logging.FileHandler(f"logs/ftl_log_{{{script_name_without_extension}}}_{time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime())}.log", mode="w")
+        fileHandler = logging.FileHandler(f"logs/ftl_log_{{{script_name_without_extension}_{config.EXPERIMENT_ID}}}_{time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime())}.log", mode="w")
         fileHandler.setLevel(logging.DEBUG)
         consoleHandler = colorlog.StreamHandler()
         consoleHandler.setLevel(colorlog.DEBUG)

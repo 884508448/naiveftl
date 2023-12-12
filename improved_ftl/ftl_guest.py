@@ -176,6 +176,7 @@ class FTLGuest(FTLBase):
             partial_ua_part4,
         ) = self.__compute_guest_components()
 
+        LOGGER.debug("watting for hBs from host")
         hB = pickle.loads(self.rcv())
         LOGGER.debug("guest get hBs from host")
 

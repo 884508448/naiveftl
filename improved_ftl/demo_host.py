@@ -14,17 +14,16 @@ h_p = {
     "learning_rate": config.LEARNING_RATE,
     "loss_tol": config.LOSS_TOLERANCE,
     "batch_size": config.BATCH_SIZE,
-    "mode": config.MODE
+    "mode": config.MODE,
+    "predict_data_path": config.HOST_VALIDATE_DATA_PATH,
 }
 if config.MINI_TEST:
     h_p.update({
         "data_path": config.MINI_HOST_TRAIN_DATA_PATH,
-        "predict_data_path": config.MINI_HOST_VALIDATE_DATA_PATH,
     })
 else:
     h_p.update({
         "data_path": config.HOST_TRAIN_DATA_PATH,
-        "predict_data_path": config.HOST_VALIDATE_DATA_PATH,
     })
 host_param = FTLParam(**h_p)
 

@@ -14,17 +14,16 @@ g_p = {
     "learning_rate": config.LEARNING_RATE,
     "loss_tol": config.LOSS_TOLERANCE,
     "batch_size": config.BATCH_SIZE,
-    "mode": config.MODE
+    "mode": config.MODE,
+    "predict_data_path": config.GUEST_VALIDATE_DATA_PATH,
 }
 if config.MINI_TEST:
     g_p.update({
         "data_path": config.MINI_GUEST_TRAIN_DATA_PATH,
-        "predict_data_path": config.MINI_GUEST_VALIDATE_DATA_PATH,
     })
 else:
     g_p.update({
         "data_path": config.GUEST_TRAIN_DATA_PATH,
-        "predict_data_path": config.GUEST_VALIDATE_DATA_PATH,
     })
 guest_param = FTLParam(**g_p)
 
