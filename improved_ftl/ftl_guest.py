@@ -3,8 +3,8 @@ import pickle
 import torch
 import tqdm
 
-from ftl_base import FTLBase
-from ftl_param import FTLParam
+from common.ftl_base import FTLBase
+from common.ftl_param import FTLParam
 from utils.ftl_data_loader import FTLDataLoader
 from utils.ftl_log import LOGGER
 from utils import config
@@ -159,11 +159,11 @@ class FTLGuest(FTLBase):
     def __remove_noise_ma3(self, noise_data):
         return noise_data - self._ma3
 
-    def __update_model(self, gradients, gradients_non):
+    def __update_model(self, gradients, gradients_non_overlap):
         self.backward(
             predicts=self.ua_nab + self.ua_non_overlap,
             gradients_tensor=torch.tensor(
-                np.concatenate([gradients, gradients_non])),
+                np.concatenate([gradients, gradients_non_overlap])),
         )
 
     @timer

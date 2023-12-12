@@ -6,7 +6,7 @@ import time
 import numpy as np
 import struct
 
-from ftl_param import FTLParam
+from common.ftl_param import FTLParam
 from utils.ftl_data_loader import FTLDataLoader
 from utils.ftl_log import LOGGER
 from typing import List

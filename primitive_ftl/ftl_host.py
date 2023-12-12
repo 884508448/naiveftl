@@ -3,8 +3,8 @@ import numpy as np
 import torch
 import tqdm
 
-from ftl_base import FTLBase
-from ftl_param import FTLParam
+from common.ftl_base import FTLBase
+from common.ftl_param import FTLParam
 from utils.ftl_log import LOGGER
 from phe import paillier
 from utils import config
@@ -80,8 +80,10 @@ class FTLHost(FTLBase):
         hB[1] = self.ub_nc_np.T
         hB[2] = self.ub_nab_np.T
         hB[3] = None  # ignore the regular term
-        hB[4] = self.m_param.const_gamma * self.m_param.const_k * self.ub_nab_np
-        hB[5] = np.expand_dims(self.m_param.const_gamma * (self.ub_nab_np ** 2).sum(),axis=0)
+        hB[4] = self.m_param.const_gamma * \
+            self.m_param.const_k * self.ub_nab_np
+        hB[5] = np.expand_dims(self.m_param.const_gamma *
+                               (self.ub_nab_np ** 2).sum(), axis=0)
 
         if self.m_param.mode == config.ENCRYPTED_MODE:
             for i in range(1, 6):
@@ -96,7 +98,8 @@ class FTLHost(FTLBase):
         if en_matrix is None:
             return None
         de_matrix = np.array(
-            [self._private_key.decrypt(x) for x in en_matrix.flatten().tolist()]
+            [self._private_key.decrypt(x)
+             for x in en_matrix.flatten().tolist()]
         ).reshape(en_matrix.shape)
         return de_matrix
 
@@ -132,7 +135,8 @@ class FTLHost(FTLBase):
         self.__update_model(gradients=partial_ub)
 
         # receive [[L]] and [[noised_partial_ua-]]
-        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(self.rcv())
+        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(
+            self.rcv())
         LOGGER.debug(
             "host received [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]]"
         )
@@ -144,7 +148,8 @@ class FTLHost(FTLBase):
                 self.__decrypt(noised_partial_ua_non),
             )
 
-        self.send(pickle.dumps((L, noised_partial_ua_minus, noised_partial_ua_non)))
+        self.send(pickle.dumps(
+            (L, noised_partial_ua_minus, noised_partial_ua_non)))
         LOGGER.debug("host send L and noised_partial_ua_minus")
         return L
 
@@ -197,7 +202,8 @@ class FTLHost(FTLBase):
             predict_ub_batchs += predict_ub_batch
 
         # convert to numpy.array
-        predict_ub_batchs = np.array([x.detach().numpy() for x in predict_ub_batchs])
+        predict_ub_batchs = np.array(
+            [x.detach().numpy() for x in predict_ub_batchs])
 
         # send to guest
         self.send(pickle.dumps(predict_ub_batchs))
@@ -206,5 +212,3 @@ class FTLHost(FTLBase):
         results, accuracy = pickle.loads(self.rcv())
         LOGGER.debug("host received predict results")
         return results, accuracy
-
-
