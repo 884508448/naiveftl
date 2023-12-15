@@ -80,8 +80,10 @@ class FTLHost(FTLBase):
         hB[1] = self.ub_nc_np.T
         hB[2] = self.ub_nab_np.T
         hB[3] = None  # ignore the regular term
-        hB[4] = self.m_param.const_gamma * self.m_param.const_k * self.ub_nab_np
-        hB[5] = np.expand_dims(self.m_param.const_gamma * (self.ub_nab_np ** 2).sum(),axis=0)
+        hB[4] = self.m_param.const_gamma * \
+            self.m_param.const_k * self.ub_nab_np
+        hB[5] = np.expand_dims(self.m_param.const_gamma *
+                               (self.ub_nab_np ** 2).sum(), axis=0)
 
         if self.m_param.mode == config.ENCRYPTED_MODE:
             for i in range(1, 6):
@@ -91,14 +93,6 @@ class FTLHost(FTLBase):
     def __update_model(self, gradients):
         gradients = torch.tensor(gradients)
         self.backward(self.ub_nab, gradients_tensor=gradients)
-
-    def __decrypt(self, en_matrix: np.array):
-        if en_matrix is None:
-            return None
-        de_matrix = np.array(
-            [self._private_key.decrypt(x) for x in en_matrix.flatten().tolist()]
-        ).reshape(en_matrix.shape)
-        return de_matrix
 
     @timer
     def __one_epoch(self):
@@ -115,8 +109,8 @@ class FTLHost(FTLBase):
         )
 
         if self.m_param.mode == config.ENCRYPTED_MODE:
-            noise_phi_ub = self.__decrypt(noise_phi_ub)
-            partial_ub_minus = self.__decrypt(partial_ub_minus)
+            noise_phi_ub = self.decrypt(noise_phi_ub)
+            partial_ub_minus = self.decrypt(partial_ub_minus)
 
         # compute the middle part
         middle_part = noise_phi_ub ** 2
@@ -133,19 +127,21 @@ class FTLHost(FTLBase):
         self.__update_model(gradients=partial_ub)
 
         # receive [[L]] and [[noised_partial_ua-]]
-        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(self.rcv())
+        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(
+            self.rcv())
         LOGGER.debug(
             "host received [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]]"
         )
 
         if self.m_param.mode == config.ENCRYPTED_MODE:
             L, noised_partial_ua_minus, noised_partial_ua_non = (
-                self.__decrypt(L),
-                self.__decrypt(noised_partial_ua_minus),
-                self.__decrypt(noised_partial_ua_non),
+                self.decrypt(L),
+                self.decrypt(noised_partial_ua_minus),
+                self.decrypt(noised_partial_ua_non),
             )
 
-        self.send(pickle.dumps((L, noised_partial_ua_minus, noised_partial_ua_non)))
+        self.send(pickle.dumps(
+            (L, noised_partial_ua_minus, noised_partial_ua_non)))
         LOGGER.debug("host send L and noised_partial_ua_minus")
         return L
 
@@ -198,7 +194,8 @@ class FTLHost(FTLBase):
             predict_ub_batchs += predict_ub_batch
 
         # convert to numpy.array
-        predict_ub_batchs = np.array([x.detach().numpy() for x in predict_ub_batchs])
+        predict_ub_batchs = np.array(
+            [x.detach().numpy() for x in predict_ub_batchs])
 
         # send to guest
         self.send(pickle.dumps(predict_ub_batchs))
@@ -207,5 +204,3 @@ class FTLHost(FTLBase):
         results, accuracy = pickle.loads(self.rcv())
         LOGGER.debug("host received predict results")
         return results, accuracy
-
-

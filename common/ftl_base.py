@@ -43,12 +43,45 @@ class FTLBase:
             self._messenger: socket.socket = self.m_sock
         LOGGER.debug("connection builded")
 
-    def encrypt(self, matrix: np.array):
+    def encrypt(self, matrix: np.array, public_key=None):
         if matrix is None:
             return None
-        en_matrix = np.array([self._public_key.encrypt(x)
+        LOGGER.debug(f"encrypting ..., shape: {matrix.shape}")
+        if public_key is None:
+            public_key = self._public_key
+        if matrix is None:
+            return None
+        en_matrix = np.array([public_key.encrypt(x)
                              for x in matrix.flatten().tolist()]).reshape(matrix.shape)
         return en_matrix
+
+    def decrypt(self, en_matrix: np.array, private_key=None):
+        if en_matrix is None:
+            return None
+        LOGGER.debug(f"decrypting ..., shape: {en_matrix.shape}")
+        if private_key is None:
+            private_key = self._private_key
+        if en_matrix is None:
+            return None
+        de_matrix = np.array(
+            [private_key.decrypt(x)
+             for x in en_matrix.flatten().tolist()]
+        ).reshape(en_matrix.shape)
+        return de_matrix
+
+    def add_partial_mask(self, partial):
+        self._partial_mask = np.random.random(size=partial.shape)
+        return partial + self._partial_mask
+
+    def remove_partial_mask(self, masked_partial):
+        return masked_partial - self._partial_mask
+
+    def add_partial_mask_non_overlap(self, partial):
+        self._partial_mask_non_overlap = np.random.random(size=partial.shape)
+        return partial + self._partial_mask_non_overlap
+
+    def remove_partial_mask_non_overlap(self, masked_partial):
+        return masked_partial - self._partial_mask_non_overlap
 
     def display(self, name: str, obj):
         """

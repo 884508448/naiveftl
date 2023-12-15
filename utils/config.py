@@ -44,3 +44,4 @@ GUEST_VALIDATE_DATA_PATH = "data/nus_wide_validate_guest.csv"
 HOST_VALIDATE_DATA_PATH = "data/nus_wide_validate_host.csv"
 
 EXPERIMENT_ID = 20
+MIDDLE_FEATURES = 32

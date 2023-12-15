@@ -114,7 +114,7 @@ class FTLGuest(FTLBase):
             + self.m_param.const_gamma * self.m_param.const_k * self.ua_nc
         )
 
-        h2_A = 1 / 4 * np.dot(self.phi_A, self.phi_A)
+        h2_A = 1 / 4 * np.expand_dims(self.phi_A, axis=1) @ np.expand_dims(self.phi_A, axis=0)
 
         L_part1 = np.array(len(self.y_nc) * np.log(2))
         L_part4 = self.m_param.const_gamma * np.sum(self.ua_nab_np ** 2)
@@ -185,7 +185,7 @@ class FTLGuest(FTLBase):
         noise_phi_ub = self.__add_noise_ma1(phi_ub)
 
         # compute partial_ub-
-        partial_ub_part2 = h2_A * hB[1].T
+        partial_ub_part2 = hB[1].T @ h2_A
         partial_ub_minus = h1_A + partial_ub_part2
 
         self.send(pickle.dumps((noise_phi_ub, partial_ub_minus)))

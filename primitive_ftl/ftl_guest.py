@@ -3,6 +3,7 @@ import pickle
 import torch
 import tqdm
 
+from phe import paillier
 from common.ftl_base import FTLBase
 from common.ftl_param import FTLParam
 from utils.ftl_data_loader import FTLDataLoader
@@ -23,6 +24,8 @@ class FTLGuest(FTLBase):
         self._not_available_lable_ids = set()
 
         self.__get_overlap_ids()
+        # generate key pair
+        self._public_key, self._private_key = paillier.generate_paillier_keypair()
         LOGGER.info("ftl guest initialization finished")
 
     def __get_overlap_ids(self):
@@ -94,6 +97,7 @@ class FTLGuest(FTLBase):
         compute and return all the parts of A that can be computed
         """
 
+        LOGGER.debug("computing guest components ...")
         self.__get_guest_components()
         self.y_nc = self.y[self.nc_indices]
         self.y_non_overlap = self.y[self.non_overlap_indices]
@@ -104,7 +108,8 @@ class FTLGuest(FTLBase):
         # get ua_nc
         self.ua_nc = self.ua_np[self.nc_indices]
 
-        h1_A = (
+        hA = [None]*3
+        hA[1] = (
             -1
             / 2
             * np.dot(
@@ -114,50 +119,21 @@ class FTLGuest(FTLBase):
             + self.m_param.const_gamma * self.m_param.const_k * self.ua_nc
         )
 
-        h2_A = 1 / 4 * np.dot(self.phi_A, self.phi_A)
+        hA[2] = 1 / 4 * np.expand_dims(self.phi_A,
+                                       axis=1) @ np.expand_dims(self.phi_A, axis=0)
 
         L_part1 = np.array(len(self.y_nc) * np.log(2))
         L_part4 = self.m_param.const_gamma * np.sum(self.ua_nab_np ** 2)
 
-        partial_ua_part4 = 2 * self.m_param.const_gamma * self.ua_nc
+        partial_ua_part3 = 2 * self.m_param.const_gamma * self.ua_nc
 
         if self.m_param.mode == config.ENCRYPTED_MODE:
-            h1_A, L_part1, L_part4 = (
-                self.encrypt(h1_A),
-                self.encrypt(L_part1),
-                self.encrypt(L_part4),
+            hA[1], hA[2] = (
+                self.encrypt(hA[1]),
+                self.encrypt(hA[2])
             )
 
-        return h1_A, h2_A, L_part1, L_part4, partial_ua_part4
-
-    def __add_noise_ma1(self, phi_ub):
-        """
-        return the result of nised phi_ub
-        and reserve the masks
-        """
-
-        self._ma1 = np.random.random(len(self.y_nc))
-        return self._ma1 * phi_ub
-
-    def __remove_noise_ma1(self, noise_2_data):
-        reci_ma1 = np.ones_like(self._ma1) / self._ma1
-        reci_ma1_2 = reci_ma1 ** 2
-
-        return noise_2_data * reci_ma1_2
-
-    def __add_noise_ma2(self, partial_ua_minus):
-        self._ma2 = np.random.random(size=partial_ua_minus.shape)
-        return self._ma2 + partial_ua_minus
-
-    def __remove_noise_ma2(self, noise_data):
-        return noise_data - self._ma2
-
-    def __add_noise_ma3(self, partial_ua_non):
-        self._ma3 = np.random.random(size=partial_ua_non.shape)
-        return self._ma3 + partial_ua_non
-
-    def __remove_noise_ma3(self, noise_data):
-        return noise_data - self._ma3
+        return hA, L_part1, L_part4, partial_ua_part3
 
     def __update_model(self, gradients, gradients_non_overlap):
         self.backward(
@@ -169,112 +145,108 @@ class FTLGuest(FTLBase):
     @timer
     def __one_epoch(self):
         (
-            h1_A,
-            h2_A,
+            hA,
             L_part1,
             L_part4,
-            partial_ua_part4,
+            partial_ua_part3,
         ) = self.__compute_guest_components()
 
+        LOGGER.debug("waitting for hBs from host")
         hB = pickle.loads(self.rcv())
         LOGGER.debug("guest get hBs from host")
 
-        # compute and send the middle part
+        # send hA to host
+        self.send(pickle.dumps(hA))
+        LOGGER.debug("guest send hA to host")
+
         phi_ub = np.dot(self.phi_A, hB[1])
-        noise_phi_ub = self.__add_noise_ma1(phi_ub)
-
-        # compute partial_ub-
-        partial_ub_part2 = h2_A * hB[1].T
-        partial_ub_minus = h1_A + partial_ub_part2
-
-        self.send(pickle.dumps((noise_phi_ub, partial_ub_minus)))
-        LOGGER.debug(
-            "guest send the middle part [[noise_phi_ub]] and partial [[ub-]]")
-
-        # receive middle part from host
-        noise_ma1_2_data = pickle.loads(self.rcv())
-        LOGGER.debug("guest received the middle part")
-        middle = self.__remove_noise_ma1(noise_ma1_2_data)
-
         L_part2 = -1 / 2 * np.dot(np.expand_dims(self.y_nc, axis=0), phi_ub)
-        L_part5 = hB[5]
+        L_part3 = 0
+        for matrix in hB[5]:
+            L_part3 = L_part3 + \
+                np.expand_dims(self.phi_A, axis=0) @ matrix @ np.expand_dims(self.phi_A, axis=1)
+        L_part3 = L_part3/8
+        L_part5 = hB[4]
         L_part6 = np.array(
             self.m_param.const_gamma
             * self.m_param.const_k
-            * (self.ua_nab_np * hB[2].T).sum()
+            * (self.ua_nab_np @ hB[2]).sum()
         )
-
-        L_part3 = 1 / 8 * \
-            np.dot(np.expand_dims(np.ones_like(middle), axis=0), middle)
 
         h_L = (L_part1 + L_part2 + L_part3 + L_part4 + L_part5 + L_part6) / len(
             self.ua_nab_np
         )
+        LOGGER.debug(f"h_L shape: {h_L.shape}")
 
         # partial ua nc
-        y_ub_sum = np.dot(self.y_nc, hB[1].T)
+        y_ub_sum = np.expand_dims(self.y_nc, axis=0) @ hB[1].T
+        LOGGER.debug(f"y_ub_sum shape:{y_ub_sum.shape}")
         partial_ua_part1 = (
             -0.5
             / len(self.y)
-            * np.dot(
-                np.expand_dims(self.y_nc, axis=1), np.expand_dims(
-                    y_ub_sum, axis=0)
-            )
+            * np.expand_dims(self.y_nc, axis=1) @ y_ub_sum
+
         )
-        partial_ua_part3 = hB[4]
+        LOGGER.debug(f"partial_ua_part1 shape:{partial_ua_part1.shape}")
+        ub_matrix_sum = np.sum(np.array(hB[5]), axis=0)
+        LOGGER.debug(f"ub_matrix_sum shape:{ub_matrix_sum.shape}")
         partial_ua_part2 = (
             0.25
             / len(self.y)
-            * hB[5]
-            / self.m_param.const_gamma
-            * np.dot(
-                np.expand_dims(self.y_nc, axis=1), np.expand_dims(
-                    self.phi_A, axis=0)
-            )
+            * np.expand_dims(self.y_nc, axis=1) @ np.expand_dims(self.phi_A, axis=0) @ ub_matrix_sum
         )
-        h_partial_ua_minus = partial_ua_part1 + partial_ua_part2 + partial_ua_part3
+        LOGGER.debug(f"partial_ua_part2 shape{partial_ua_part2.shape}")
+        partial_ua_part4 = self.m_param.const_gamma * \
+            self.m_param.const_k*hB[1].T
+        LOGGER.debug(f"partial_ua_part4 shape{partial_ua_part4.shape}")
+        h_partial_ua_nc = partial_ua_part1 + partial_ua_part2 + \
+            partial_ua_part3 + partial_ua_part4
 
         # partial ua non overlap
         h_partial_ua_part1_non = (
             -0.5
             / len(self.y)
-            * np.dot(
-                np.expand_dims(self.y_non_overlap, axis=1),
-                np.expand_dims(y_ub_sum, axis=0),
-            )
+            * np.expand_dims(self.y_non_overlap, axis=1) @ y_ub_sum
         )
+
         h_partial_ua_part2_non = (
             0.25
             / len(self.y)
-            * hB[5]
-            / self.m_param.const_gamma
-            * np.dot(
-                np.expand_dims(self.y_non_overlap, axis=1),
-                np.expand_dims(self.phi_A, axis=0),
-            )
+            * np.expand_dims(self.y_non_overlap, axis=1)
+            @ np.expand_dims(self.phi_A, axis=0)
+            @ ub_matrix_sum
         )
         h_partial_ua_non = h_partial_ua_part1_non + h_partial_ua_part2_non
 
-        # noise partial_ua -
-        h_noised_partial_ua_minus = self.__add_noise_ma2(h_partial_ua_minus)
-        h_noised_partial_ua_non = self.__add_noise_ma3(h_partial_ua_non)
-        # send the [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]] to host
-        self.send(pickle.dumps(
-            (h_L, h_noised_partial_ua_minus, h_noised_partial_ua_non)))
-        LOGGER.debug(
-            "guest send [[L]], [[noised_partial_ua-]], [[noised_partial_ua_non]]")
+        # add mask for partial_ua_nc
+        masked_h_partial_ua_nc = self.add_partial_mask(h_partial_ua_nc)
+        # add mask for partial_ua_non
+        masked_h_partial_ua_non_overlap = self.add_partial_mask_non_overlap(
+            h_partial_ua_non)
 
-        # receive L, noised partial_ua-
-        L, noised_partial_ua_minus, noised_partial_ua_non = pickle.loads(
+        # send masked partials and [[L]] to host
+        LOGGER.debug("send masked partials and [[L]] to host")
+        self.send(pickle.dumps((masked_h_partial_ua_nc,
+                  masked_h_partial_ua_non_overlap, h_L)))
+
+        # receive masked_partials and L
+        LOGGER.debug("waitting for masked_ua_partials L, and masked_h_partial_ub from host")
+        masked_partial_ua, masked_partial_ua_non, L, masked_ub_partials = pickle.loads(
             self.rcv())
+
+        if self.m_param.mode == config.ENCRYPTED_MODE:
+            LOGGER.debug("decrypt masked_h_ub_partials ...")
+            masked_ub_partials = self.decrypt(masked_ub_partials)
+        LOGGER.debug("send masked ub partials back")
+        self.send(pickle.dumps(masked_ub_partials))
+
+        # remove masks
+        partial_ua, partial_ua_non = self.remove_partial_mask(
+            masked_partial_ua), self.remove_partial_mask_non_overlap(masked_partial_ua_non)
+
+        LOGGER.debug("updating model ...")
         LOGGER.debug(
-            "guest received L, noised_partial_ua_minus, noised_partial_ua_non")
-
-        # compute partial_ua and update model
-        partial_ua_minus = self.__remove_noise_ma2(noised_partial_ua_minus)
-        partial_ua_non = self.__remove_noise_ma3(noised_partial_ua_non)
-        partial_ua = partial_ua_minus + partial_ua_part4
-
+            f"partial_ua shape:{partial_ua.shape}, partial_ua_non shape:{partial_ua_non.shape}")
         self.__update_model(partial_ua, partial_ua_non)
         return L
 
@@ -283,10 +255,6 @@ class FTLGuest(FTLBase):
         # check optimizer for the model
         if self._optimizer is None:
             self.set_optimizer()
-
-        # receive public key from host
-        self._public_key = pickle.loads(self.rcv())
-        LOGGER.debug("receive public key from host")
 
         LOGGER.info(f"guest training, mode: {self.m_param.mode}")
         for epoch in tqdm.tqdm(range(self.m_param.epochs)):
@@ -350,6 +318,7 @@ class FTLGuest(FTLBase):
         predict_phi_A /= len(predic_data_loader.data_frame)
 
         # receive predict ubs from host
+        LOGGER.debug("waitting for predict ubs from host")
         predict_ubs = pickle.loads(self.rcv())
         LOGGER.debug("predict ubs received")
         results = np.dot(predict_phi_A, predict_ubs.T)

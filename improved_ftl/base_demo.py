@@ -48,6 +48,3 @@ def test():
         y = public_key.encrypt(y)
 
         z = x+y
-
-
-print(test())

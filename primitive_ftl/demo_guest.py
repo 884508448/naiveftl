@@ -1,7 +1,7 @@
 import torch
 
 from torch import nn
-from improved_ftl.ftl_guest import FTLGuest
+from primitive_ftl.ftl_guest import FTLGuest
 from common.ftl_param import FTLParam
 from utils import config
 

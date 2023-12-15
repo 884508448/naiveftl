@@ -6,7 +6,7 @@ from utils.ftl_log import LOGGER
 
 class FTLDataLoader:
     """
-    input the path of data, get three variables:
+    input the path of data, get these variables:
     data_inst: pandas Dataframe of the data
     id_index_map: the mapping of data id to the index in data_inst or data_matrix
     data_matrix: the numpy matrix of data, column 'id' and 'y' (if it has) has been deleted
