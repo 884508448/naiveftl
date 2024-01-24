@@ -26,19 +26,19 @@ def train(id: int):
     host_ftl = FTLHost(host_param)
 
     host_ftl.add_nn_layer(
-        layer=nn.Linear(in_features=1000, out_features=32, dtype=torch.float32)
+        layer=nn.Linear(in_features=1000, out_features=config.MIDDLE_FEATURES, dtype=torch.float32)
     )
     host_ftl.add_nn_layer(layer=nn.Sigmoid())
     host_ftl.add_nn_layer(layer=nn.Linear(
-        in_features=32, out_features=32, dtype=torch.float32))
+        in_features=config.MIDDLE_FEATURES, out_features=config.MIDDLE_FEATURES, dtype=torch.float32))
     host_ftl.add_nn_layer(layer=nn.Sigmoid())
     host_ftl.add_nn_layer(layer=nn.Linear(
-        in_features=32, out_features=32, dtype=torch.float32))
+        in_features=config.MIDDLE_FEATURES, out_features=config.MIDDLE_FEATURES, dtype=torch.float32))
     host_ftl.add_nn_layer(layer=nn.Sigmoid())
     host_ftl.add_nn_layer(layer=nn.Linear(
-        in_features=32, out_features=32, dtype=torch.float32))
+        in_features=config.MIDDLE_FEATURES, out_features=config.MIDDLE_FEATURES, dtype=torch.float32))
     host_ftl.add_nn_layer(layer=nn.Sigmoid())
-    host_ftl.add_nn_layer(layer=nn.BatchNorm1d(num_features=32))
+    host_ftl.add_nn_layer(layer=nn.BatchNorm1d(num_features=config.MIDDLE_FEATURES))
     host_ftl.train()
 
 
